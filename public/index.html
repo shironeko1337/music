@@ -17,6 +17,9 @@
         <option value="6">String 6 (Low E)</option>
         <option value="5" selected>String 5 (A)</option>
         <option value="4">String 4 (D)</option>
+        <option value="3">String 3 (G)</option>
+        <option value="2">String 2 (B)</option>
+        <option value="1">String 1 (High E)</option>
       </select>
     </div>
 
@@ -38,6 +41,8 @@
         <option value="min">Minor (R + b3 + 5)</option>
         <option value="maj7">Maj7 (3 + 7)</option>
         <option value="m7">m7 (b3 + b7)</option>
+        <option value="6">Major 6 (3 + 6, 6th 2 strings higher)</option>
+        <option value="m6">Minor 6 (b3 + 6, 6th 2 strings higher)</option>
         <option value="7">Dom 7 (3 + b7)</option>
         <option value="9" selected>Dom 9 (3 + b7 + 9)</option>
         <option value="11">Dom 11 (3 + b7 + 11)</option>
@@ -50,10 +55,18 @@
       <label style="display:block; font-size:12px; color:#94a3b8; margin-bottom:4px;">Relative Pos. of 3rd (Inversion)</label>
       <select id="gs-third-pos" style="width:100%; padding:6px; border-radius:6px; background:#0f172a; color:#fff; border:1px solid #475569;">
         <option value="up1" selected>1 String Higher (Close / Std 5th-Str)</option>
-        <option value="up2">2 Strings Higher (Spread / Std 6th-Str)</option>
         <option value="up3">3 Strings Higher (3rd on Top Voice)</option>
-        <option value="down1">1 String Lower in Pitch (1st Inv: 3rd in Bass)</option>
+        <option value="down2">2 Strings Lower in Pitch (1st Inv: 3rd in Bass)</option>
       </select>
+    </div>
+
+    <div style="grid-column: 1 / -1; display:flex; align-items:center; gap:14px;">
+      <div style="display:flex; flex-wrap:wrap; gap:8px;">
+        <button id="gs-random" type="button" data-chords="" style="flex:none; padding:7px 14px; border-radius:6px; background:#0369a1; color:#fff; border:1px solid #38bdf8; font-weight:600; cursor:pointer;">🎲 Random Chord</button>
+        <button id="gs-random-common" type="button" data-chords="maj7,m7,7" title="maj7, m7, 7" style="flex:none; padding:7px 14px; border-radius:6px; background:#0369a1; color:#fff; border:1px solid #38bdf8; font-weight:600; cursor:pointer;">🎲 Common</button>
+        <button id="gs-random-common6" type="button" data-chords="maj7,m7,7,6,m6" title="maj7, m7, 7, 6, m6" style="flex:none; padding:7px 14px; border-radius:6px; background:#0369a1; color:#fff; border:1px solid #38bdf8; font-weight:600; cursor:pointer;">🎲 Common + 6</button>
+      </div>
+      <div id="gs-chord-name" style="font-size:20px; font-weight:700; color:#f1f5f9; line-height:1.2;"></div>
     </div>
   </div>
 
@@ -86,17 +99,21 @@
   const MAX_FRET = 15;
 
   // tones: semitones above root -> { label, required }. The 3rd is placed by the "3rd position" option.
+  // pin: a tone fixed to a string relative to the root (offset -2 = 2 strings higher). The 7th of
+  // every 7th chord and the 6th of 6 / m6 sit 2 strings above the root (e.g. Emaj7 0 2 1 1 0 0).
   const CHORD_SPECS = {
-    maj:    { name: "",      third: 4, tones: { 0: ["R", true], 4: ["3", true],  7: ["5", false] } },
-    min:    { name: "m",     third: 3, tones: { 0: ["R", true], 3: ["b3", true], 7: ["5", false] } },
-    maj7:   { name: "maj7",  third: 4, tones: { 0: ["R", true], 4: ["3", true],  7: ["5", false], 11: ["7", true] } },
-    m7:     { name: "m7",    third: 3, tones: { 0: ["R", true], 3: ["b3", true], 7: ["5", false], 10: ["b7", true] } },
-    "7":    { name: "7",     third: 4, tones: { 0: ["R", true], 4: ["3", true],  7: ["5", false], 10: ["b7", true] } },
-    "9":    { name: "9",     third: 4, tones: { 0: ["R", true], 4: ["3", true],  7: ["5", false], 10: ["b7", true], 2: ["9", true] } },
-    "11":   { name: "11",    third: 4, tones: { 0: ["R", true], 4: ["3", true],  7: ["5", false], 10: ["b7", true], 2: ["9", false], 5: ["11", true] } },
-    "13":   { name: "13",    third: 4, tones: { 0: ["R", true], 4: ["3", true],  7: ["5", false], 10: ["b7", true], 2: ["9", false], 9: ["13", true] } },
+    maj:    { name: "",      type: "Major",   third: 4, tones: { 0: ["R", true], 4: ["3", true],  7: ["5", false] } },
+    min:    { name: "m",     type: "Minor",   third: 3, tones: { 0: ["R", true], 3: ["b3", true], 7: ["5", false] } },
+    maj7:   { name: "maj7",  type: "Major 7", third: 4, pin: { semi: 11, offset: -2 }, tones: { 0: ["R", true], 4: ["3", true],  7: ["5", false], 11: ["7", true] } },
+    m7:     { name: "m7",    type: "Minor 7", third: 3, pin: { semi: 10, offset: -2 }, tones: { 0: ["R", true], 3: ["b3", true], 7: ["5", false], 10: ["b7", true] } },
+    "6":    { name: "6",     type: "Major 6", third: 4, pin: { semi: 9, offset: -2 }, tones: { 0: ["R", true], 4: ["3", true],  7: ["5", false], 9: ["6", true] } },
+    m6:     { name: "m6",    type: "Minor 6", third: 3, pin: { semi: 9, offset: -2 }, tones: { 0: ["R", true], 3: ["b3", true], 7: ["5", false], 9: ["6", true] } },
+    "7":    { name: "7",     type: "Dom 7",   third: 4, pin: { semi: 10, offset: -2 }, tones: { 0: ["R", true], 4: ["3", true],  7: ["5", false], 10: ["b7", true] } },
+    "9":    { name: "9",     type: "Dom 9",   third: 4, pin: { semi: 10, offset: -2 }, tones: { 0: ["R", true], 4: ["3", true],  7: ["5", false], 10: ["b7", true], 2: ["9", true] } },
+    "11":   { name: "11",    type: "Dom 11",  third: 4, pin: { semi: 10, offset: -2 }, tones: { 0: ["R", true], 4: ["3", true],  7: ["5", false], 10: ["b7", true], 2: ["9", false], 5: ["11", true] } },
+    "13":   { name: "13",    type: "Dom 13",  third: 4, pin: { semi: 10, offset: -2 }, tones: { 0: ["R", true], 4: ["3", true],  7: ["5", false], 10: ["b7", true], 2: ["9", false], 9: ["13", true] } },
     // C/A: A C E G = Am7. The 6th sits in the bass, one string below the root.
-    slash6: { name: "/6",    third: 4, tones: { 0: ["R", true], 4: ["3", true],  7: ["5", false], 9: ["6", true] } }
+    slash6: { name: "/6",    type: "Major, 6th in bass", third: 4, pin: { semi: 9, offset: 1 }, tones: { 0: ["R", true], 4: ["3", true],  7: ["5", false], 9: ["6", true] } }
   };
 
   // Hand-checked shapes that override the search. frets are strings 6 -> 1, null = muted.
@@ -107,7 +124,7 @@
     { root: "C", rootStr: 5, chord: "maj7", thirdPos: "up1", frets: [null, 3, 2, 0, 0, 0] }
   ];
 
-  const THIRD_OFFSET = { up1: -1, up2: -2, up3: -3, down1: 1 };
+  const THIRD_OFFSET = { up1: -1, up3: -3, down2: 2 };
 
   const pitchAt = (str, fret) => (OPEN_PITCH[str] + fret) % 12;
 
@@ -174,15 +191,24 @@
     const thirdStr = rootStr + THIRD_OFFSET[thirdPos];
 
     if (thirdStr < 1 || thirdStr > 6) {
-      return { error: "No string " + (thirdPos === "down1" ? "below" : "above") + " string " + rootStr + " for the 3rd in this position." };
+      return { error: "No string " + (thirdPos === "down2" ? "2 strings below" : "that far above") + " string " + rootStr + " for the 3rd in this position." };
     }
-    let sixthStr = null;
-    if (chordKey === "slash6") {
-      sixthStr = rootStr + 1;
-      if (sixthStr > 6) return { error: "Slash /6th needs a string below the root; pick root on string 5 or 4." };
-      if (sixthStr === thirdStr) return { error: "Slash /6th puts the 6th in the bass, so the 3rd can't be there too." };
+    let pinStr = null, pinLabel = null;
+    if (spec.pin) {
+      pinStr = rootStr + spec.pin.offset;
+      pinLabel = spec.tones[spec.pin.semi][0];
+      if (chordKey === "slash6") {
+        if (pinStr > 6) return { error: "Slash /6th needs a string below the root; pick a root string other than 6." };
+        if (thirdStr > rootStr) return { error: "Slash /6th puts the 6th in the bass, so the 3rd must be above the root." };
+      } else if (pinStr < 1) {
+        return { error: "The " + pinLabel + " goes 2 strings above the root; pick a root on string 6, 5, 4 or 3." };
+      }
     }
-    const bassStr = sixthStr || Math.max(rootStr, thirdStr);
+    const bassStr = Math.max(rootStr, thirdStr, pinStr || 0);
+    const requiredCount = Object.values(spec.tones).filter(t => t[1]).length;
+    if (bassStr < requiredCount) {
+      return { error: "Only " + bassStr + " string(s) from the bass up, but " + chordSymbol(rootName, chordKey) + " needs " + requiredCount + " notes." };
+    }
 
     const corner = CORNER_CASES.find(c => c.root === rootName && c.rootStr === rootStr && c.chord === chordKey && c.thirdPos === thirdPos);
     if (corner) {
@@ -204,41 +230,43 @@
           if (rootFret > 0 && thirdFret > 0 && Math.abs(rootFret - thirdFret) > maxSpan) continue;
           // An open root only works with a shape near the nut; otherwise use the octave (fret 12)
           if (rootFret === 0 && thirdFret > maxSpan + 1) continue;
-          const fixed = { [rootStr]: rootFret, [thirdStr]: thirdFret };
-          if (sixthStr) {
-            const f6 = fretsFor(sixthStr, (rootPC + 9) % 12).find(f => f === 0 || (rootFret === 0 || Math.abs(f - rootFret) <= maxSpan));
-            if (f6 === undefined) continue;
-            fixed[sixthStr] = f6;
-          }
           const anchor = rootFret || thirdFret;
-          const free = [];
-          for (let s = bassStr - 1; s >= 1; s--) if (fixed[s] === undefined) free.push(s);
+          const pinFrets = pinStr ? fretsFor(pinStr, (rootPC + spec.pin.semi) % 12) : [null];
+          for (const pinFret of pinFrets) {
+            if (pinFret > 0 && anchor > 0 && Math.abs(pinFret - anchor) > maxSpan) continue;
+            if (pinFret > 0 && anchor === 0 && pinFret > maxSpan + 1) continue;
+            const fixed = { [rootStr]: rootFret, [thirdStr]: thirdFret };
+            if (pinStr) fixed[pinStr] = pinFret;
+            const free = [];
+            for (let s = bassStr - 1; s >= 1; s--) if (fixed[s] === undefined) free.push(s);
 
-          // Options per free string: muted, or any chord tone near the anchor / open.
-          // The 3rd may only double above the chosen 3rd string.
-          const options = free.map(s => {
-            const opts = [null];
-            for (let f = 0; f <= MAX_FRET; f++) {
-              if (f > 0 && anchor > 0 && Math.abs(f - anchor) > maxSpan) continue;
-              if (f > 0 && anchor === 0 && f > maxSpan + 1) continue;
-              const l = labelFor(spec, rootPC, s, f);
-              if (!l) continue;
-              if ((l === "3" || l === "b3") && s > thirdStr) continue;
-              opts.push(f);
-            }
-            return opts;
-          });
+            // Options per free string: muted, or any chord tone near the anchor / open.
+            // The 3rd and the pinned tone may only double above their chosen strings.
+            const options = free.map(s => {
+              const opts = [null];
+              for (let f = 0; f <= MAX_FRET; f++) {
+                if (f > 0 && anchor > 0 && Math.abs(f - anchor) > maxSpan) continue;
+                if (f > 0 && anchor === 0 && f > maxSpan + 1) continue;
+                const l = labelFor(spec, rootPC, s, f);
+                if (!l) continue;
+                if ((l === "3" || l === "b3") && s > thirdStr) continue;
+                if (l === pinLabel && s > pinStr) continue;
+                opts.push(f);
+              }
+              return opts;
+            });
 
-          const frets = { 1: null, 2: null, 3: null, 4: null, 5: null, 6: null, ...fixed };
-          (function walk(i) {
-            if (i === free.length) {
-              const sc = scoreVoicing(frets, spec, rootPC, maxSpan);
-              if (sc != null && sc > bestScore) { bestScore = sc; best = { ...frets }; }
-              return;
-            }
-            for (const f of options[i]) { frets[free[i]] = f; walk(i + 1); }
-            frets[free[i]] = null;
-          })(0);
+            const frets = { 1: null, 2: null, 3: null, 4: null, 5: null, 6: null, ...fixed };
+            (function walk(i) {
+              if (i === free.length) {
+                const sc = scoreVoicing(frets, spec, rootPC, maxSpan);
+                if (sc != null && sc > bestScore) { bestScore = sc; best = { ...frets }; }
+                return;
+              }
+              for (const f of options[i]) { frets[free[i]] = f; walk(i + 1); }
+              frets[free[i]] = null;
+            })(0);
+          }
         }
         if (best) break; // prefer the lowest root position that works
       }
@@ -253,14 +281,26 @@
     return { frets, labels, bassStr, fromCornerCase };
   }
 
-  globalThis.GuitarVoicing = { computeVoicing, CHORD_SPECS, CORNER_CASES };
+  // Naming rule: "<root><suffix> on <root string>", e.g. "G on 4", "Em7 on 6", "C9 on 5".
+  // Suffixes are standard chord symbols: "" major, "m" minor, "maj7", "m7", and a bare
+  // 7 / 9 / 11 / 13 means dominant (C9 = Dom 9). Slash /6 is written with its bass note (C/A).
+  const NOTE_NAMES = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
+  function chordSymbol(rootName, chordKey) {
+    if (chordKey === "slash6") return rootName + "/" + NOTE_NAMES[(NOTE_VAL[rootName] + 9) % 12];
+    return rootName + CHORD_SPECS[chordKey].name;
+  }
+  function chordName(rootStr, rootName, chordKey) {
+    return chordSymbol(rootName, chordKey) + " on " + rootStr;
+  }
+
+  globalThis.GuitarVoicing = { computeVoicing, chordName, CHORD_SPECS, CORNER_CASES };
 })();
 </script>
 
 <script>
 (function() {
   if (typeof document === "undefined") return;
-  const { computeVoicing, CHORD_SPECS } = globalThis.GuitarVoicing;
+  const { computeVoicing, chordName: nameChord, CHORD_SPECS } = globalThis.GuitarVoicing;
 
   const COLORS = {
     "R":  "#ef4444",
@@ -284,18 +324,19 @@
     const thirdPos = document.getElementById("gs-third-pos").value;
 
     const result = computeVoicing(rootStr, rootName, chordKey, thirdPos);
-    const chordName = rootName + CHORD_SPECS[chordKey].name;
+    document.getElementById("gs-chord-name").innerHTML = nameChord(rootStr, rootName, chordKey) +
+      "<div style='font-size:12px; font-weight:400; color:#94a3b8;'>" + CHORD_SPECS[chordKey].type + "</div>";
     const status = document.getElementById("gs-status");
     const frets = result.frets || {};
     const labels = result.labels || {};
 
     if (result.error) {
-      status.innerHTML = "<div><strong>" + chordName + "</strong> &nbsp;|&nbsp; <span style='color:#f87171;'>" + result.error + "</span></div>";
+      status.innerHTML = "<div style='color:#f87171;'>" + result.error + "</div>";
     } else {
       const played = [6, 5, 4, 3, 2, 1].filter(s => frets[s] != null);
       const tab = [6, 5, 4, 3, 2, 1].map(s => frets[s] == null ? "x" : frets[s]);
       status.innerHTML =
-        "<div><strong>" + chordName + "</strong> &nbsp;|&nbsp; <span style='color:#38bdf8;'>" + inversionText(rootName, labels[played[0]]) + "</span></div>" +
+        "<div style='color:#38bdf8;'>" + inversionText(rootName, labels[played[0]]) + "</div>" +
         "<div style='font-family:monospace; color:#fde047;'>Tab (6→1): " + tab.join(" ") + "</div>";
     }
 
@@ -386,8 +427,37 @@
     }
   }
 
-  ["gs-root-str", "gs-root-note", "gs-chord-type", "gs-third-pos"].forEach(id => {
+  const SELECT_IDS = ["gs-root-str", "gs-root-note", "gs-chord-type", "gs-third-pos"];
+  SELECT_IDS.forEach(id => {
     document.getElementById(id).addEventListener("change", render);
+  });
+
+  // Every option combination that yields a playable voicing, built once from the selects
+  let playableCombos = null;
+  function getPlayableCombos() {
+    if (playableCombos) return playableCombos;
+    const values = id => Array.from(document.getElementById(id).options, o => o.value);
+    playableCombos = [];
+    for (const rootStr of values("gs-root-str"))
+      for (const rootName of values("gs-root-note"))
+        for (const chordKey of values("gs-chord-type"))
+          for (const thirdPos of values("gs-third-pos"))
+            if (!computeVoicing(parseInt(rootStr, 10), rootName, chordKey, thirdPos).error)
+              playableCombos.push([rootStr, rootName, chordKey, thirdPos]);
+    return playableCombos;
+  }
+
+  // Each random button limits the pick to the chord types in its data-chords (empty = all)
+  ["gs-random", "gs-random-common", "gs-random-common6"].forEach(id => {
+    const button = document.getElementById(id);
+    const allowed = button.dataset.chords ? button.dataset.chords.split(",") : null;
+    button.addEventListener("click", () => {
+      const current = SELECT_IDS.map(id => document.getElementById(id).value).join("|");
+      const choices = getPlayableCombos().filter(c => c.join("|") !== current && (!allowed || allowed.includes(c[2])));
+      const pick = choices[Math.floor(Math.random() * choices.length)];
+      SELECT_IDS.forEach((id, i) => { document.getElementById(id).value = pick[i]; });
+      render();
+    });
   });
   render();
 })();
