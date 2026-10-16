@@ -1,0 +1,287 @@
+<div id="guitar-shell-explorer" style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #0f172a; color: #f8fafc; padding: 20px; border-radius: 12px; max-width: 900px; border: 1px solid #334155;">
+  <h3 style="margin: 0 0 14px 0; font-size: 18px; color: #f1f5f9;">Movable Guitar Shell & Inversion Explorer</h3>
+
+  <!-- Controls Grid -->
+  <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 12px; margin-bottom: 16px; background: #1e293b; padding: 12px; border-radius: 8px;">
+    <div>
+      <label style="display:block; font-size:12px; color:#94a3b8; margin-bottom:4px;">Root String</label>
+      <select id="gs-root-str" style="width:100%; padding:6px; border-radius:6px; background:#0f172a; color:#fff; border:1px solid #475569;">
+        <option value="6">String 6 (Low E)</option>
+        <option value="5" selected>String 5 (A)</option>
+        <option value="4">String 4 (D)</option>
+      </select>
+    </div>
+
+    <div>
+      <label style="display:block; font-size:12px; color:#94a3b8; margin-bottom:4px;">Root Note</label>
+      <select id="gs-root-note" style="width:100%; padding:6px; border-radius:6px; background:#0f172a; color:#fff; border:1px solid #475569;">
+        <option value="C" selected>C</option>
+        <option value="A">A</option>
+        <option value="G">G</option>
+        <option value="E">E</option>
+        <option value="D">D</option>
+      </select>
+    </div>
+
+    <div>
+      <label style="display:block; font-size:12px; color:#94a3b8; margin-bottom:4px;">Chord Type (3rd / 7th / Ext)</label>
+      <select id="gs-chord-type" style="width:100%; padding:6px; border-radius:6px; background:#0f172a; color:#fff; border:1px solid #475569;">
+        <option value="maj7">Major (Maj3 + Maj7)</option>
+        <option value="m7">Minor (b3 + b7)</option>
+        <option value="7">Dom 7 (3 + b7)</option>
+        <option value="9" selected>Dom 9 (3 + b7 + 9)</option>
+        <option value="11">Dom 11 (b7 + 9 + 11)</option>
+        <option value="13">Dom 13 (3 + b7 + 13)</option>
+        <option value="slash6">Slash /6th in Bass (e.g. C/A = Am7)</option>
+      </select>
+    </div>
+
+    <div>
+      <label style="display:block; font-size:12px; color:#94a3b8; margin-bottom:4px;">Relative Pos. of 3rd (Inversion)</label>
+      <select id="gs-third-pos" style="width:100%; padding:6px; border-radius:6px; background:#0f172a; color:#fff; border:1px solid #475569;">
+        <option value="up1" selected>1 String Higher (Close / Std 5th-Str)</option>
+        <option value="up2">2 Strings Higher (Spread / Std 6th-Str)</option>
+        <option value="up3">3 Strings Higher (3rd on Top Voice)</option>
+        <option value="down1">1 String Lower in Pitch (1st Inv: 3rd in Bass)</option>
+      </select>
+    </div>
+  </div>
+
+  <!-- Info Banner -->
+  <div id="gs-status" style="display:flex; flex-wrap:wrap; justify-content:space-between; align-items:center; background:#1e293b; padding:10px 14px; border-radius:8px; margin-bottom:14px; font-size:13px; border-left: 4px solid #38bdf8;"></div>
+
+  <!-- Fretboard Canvas -->
+  <div style="overflow-x: auto;">
+    <canvas id="gs-canvas" width="860" height="270" style="width:100%; max-width:860px; background:#0b1120; border-radius:8px; display:block;"></canvas>
+  </div>
+
+  <!-- Legend -->
+  <div style="display:flex; gap:16px; flex-wrap:wrap; margin-top:12px; font-size:12px; color:#cbd5e1;">
+    <span><b style="color:#ef4444;">● R</b> Root</span>
+    <span><b style="color:#f59e0b;">● 3 / b3</b> 3rd (Determines Inversion if in Bass)</span>
+    <span><b style="color:#3b82f6;">● 7 / b7</b> 7th</span>
+    <span><b style="color:#10b981;">● 9 / 11 / 13 / 6</b> Extension</span>
+    <span><b style="color:#64748b;">● 5</b> Optional 5th (Gray)</span>
+  </div>
+</div>
+
+<script>
+(function() {
+  // Open string pitch classes (C=0, C#=1, D=2, D#=3, E=4, F=5, F#=6, G=7, G#=8, A=9, A#=10, B=11)
+  // String index: 6=Low E, 5=A, 4=D, 3=G, 2=B, 1=High E
+  const OPEN_PITCH = { 6: 4, 5: 9, 4: 2, 3: 7, 2: 11, 1: 4 };
+  const NOTE_VAL = { C: 0, D: 2, E: 4, G: 7, A: 9 };
+  const CHORD_SPECS = {
+    maj7:   { name: "Maj7", third: { semi: 4, label: "3" }, seventh: { semi: 11, label: "7" }, ext: null },
+    m7:     { name: "m7",   third: { semi: 3, label: "b3" }, seventh: { semi: 10, label: "b7" }, ext: null },
+    "7":    { name: "7",    third: { semi: 4, label: "3" }, seventh: { semi: 10, label: "b7" }, ext: null },
+    "9":    { name: "9",    third: { semi: 4, label: "3" }, seventh: { semi: 10, label: "b7" }, ext: { semi: 2, label: "9" } },
+    "11":   { name: "11",   third: { semi: 4, label: "3" }, seventh: { semi: 10, label: "b7" }, ext: { semi: 5, label: "11" } },
+    "13":   { name: "13",   third: { semi: 4, label: "3" }, seventh: { semi: 10, label: "b7" }, ext: { semi: 9, label: "13" } },
+    slash6: { name: "/6th (Rel. Minor Bass)", third: { semi: 4, label: "3" }, seventh: { semi: 10, label: "b7" }, ext: { semi: 9, label: "6" } }
+  };
+
+  const COLORS = {
+    "R":  "#ef4444",
+    "3":  "#f59e0b", "b3": "#f59e0b",
+    "7":  "#3b82f6", "b7": "#3b82f6",
+    "9":  "#10b981", "11": "#10b981", "13": "#10b981", "6": "#10b981",
+    "5":  "#64748b" // Gray marker for 5th
+  };
+
+  function findFretNear(str, targetPitchClass, anchorFret) {
+    let bestFret = -1, minDist = 99;
+    for (let f = 1; f <= 15; f++) {
+      if ((OPEN_PITCH[str] + f) % 12 === targetPitchClass) {
+        let dist = Math.abs(f - anchorFret);
+        if (dist < minDist) { minDist = dist; bestFret = f; }
+      }
+    }
+    return bestFret;
+  }
+
+  function computeVoicing(rootStr, rootName, chordKey, thirdPos) {
+    const rootPC = NOTE_VAL[rootName];
+    const spec = CHORD_SPECS[chordKey];
+    // Pick comfortable middle-neck anchor fret (frets 2..10)
+    let rootFret = findFretNear(rootStr, rootPC, 5);
+    if (rootFret < 2) rootFret += 12;
+
+    const thirdStrMap = {
+      up1:   rootStr - 1, // 1 string higher in pitch
+      up2:   rootStr - 2, // 2 strings higher in pitch
+      up3:   rootStr - 3, // 3 strings higher in pitch
+      down1: rootStr + 1  // 1 string lower in pitch (bass)
+    };
+
+    let thirdStr = thirdStrMap[thirdPos];
+    let warning = "";
+    if (thirdStr < 1) { thirdStr = 1; warning = " (Clamped 3rd to String 1)"; }
+    if (thirdStr > 6) { thirdStr = 6; warning = " (Root is already on String 6; 3rd placed on String 6 replaces Root in bass)"; }
+
+    const usedStrings = {};
+    // 1. Place Root
+    usedStrings[rootStr] = { fret: rootFret, label: "R" };
+
+    // 2. Place 3rd (or Slash 6th in bass if slash6 selected)
+    const thirdPC = (rootPC + spec.third.semi) % 12;
+    if (thirdPos === "down1" && rootStr === 6) {
+      // Put 3rd on String 6 as 1st inversion bass, move Root to String 4
+      usedStrings[6] = { fret: findFretNear(6, thirdPC, rootFret), label: spec.third.label };
+      usedStrings[4] = { fret: findFretNear(4, rootPC, rootFret), label: "R" };
+    } else {
+      usedStrings[thirdStr] = { fret: findFretNear(thirdStr, thirdPC, rootFret), label: spec.third.label };
+    }
+
+    // Handle C/A style relative minor bass if selected
+    if (chordKey === "slash6") {
+      const sixthPC = (rootPC + 9) % 12;
+      const bassStr = Math.min(6, rootStr + 1);
+      usedStrings[bassStr] = { fret: findFretNear(bassStr, sixthPC, rootFret), label: "6" };
+    }
+
+    // 3. Place 7th on nearest available upper/middle string
+    const sevPC = (rootPC + spec.seventh.semi) % 12;
+    const candidateSevStrings = [rootStr - 1, rootStr - 2, rootStr - 3, 3, 2, 4].filter(s => s >= 1 && s <= 6 && !usedStrings[s]);
+    if (candidateSevStrings.length > 0) {
+      const s7 = candidateSevStrings[0];
+      usedStrings[s7] = { fret: findFretNear(s7, sevPC, rootFret), label: spec.seventh.label };
+    }
+
+    // 4. Place Extension (9, 11, 13) on highest available string
+    if (spec.ext && chordKey !== "slash6") {
+      const extPC = (rootPC + spec.ext.semi) % 12;
+      const availExt = [2, 1, 3, 4].filter(s => s < rootStr && !usedStrings[s]);
+      if (availExt.length > 0) {
+        const sExt = availExt[0];
+        usedStrings[sExt] = { fret: findFretNear(sExt, extPC, rootFret), label: spec.ext.label };
+      }
+    }
+
+    // 5. Place Gray 5th on remaining unused upper/middle string for visual reference
+    const fifthPC = (rootPC + 7) % 12;
+    const availFifth = [rootStr - 1, rootStr - 2, 2, 1, 3, 4, 5].filter(s => s >= 1 && s <= 6 && !usedStrings[s]);
+    if (availFifth.length > 0) {
+      const s5 = availFifth[0];
+      const f5 = findFretNear(s5, fifthPC, rootFret);
+      if (Math.abs(f5 - rootFret) <= 3) {
+        usedStrings[s5] = { fret: f5, label: "5", isOptionalFifth: true };
+      }
+    }
+
+    // Determine lowest sounded string (bass note) -> Inversion state
+    const activeStrings = Object.keys(usedStrings).map(Number).sort((a, b) => b - a);
+    const bassLabel = usedStrings[activeStrings[0]].label;
+    let invText = "Root Position (R in Bass)";
+    if (bassLabel === "3" || bassLabel === "b3") invText = "1st Inversion (3rd in Bass, e.g. " + rootName + "/3rd)";
+    else if (bassLabel === "5") invText = "2nd Inversion (5th in Bass)";
+    else if (bassLabel === "6") invText = "Relative Minor Slash (" + rootName + "/6th = rel. m7)";
+
+    return { usedStrings, invText: invText + warning, rootFret };
+  }
+
+  function render() {
+    const rootStr = parseInt(document.getElementById("gs-root-str").value, 10);
+    const rootName = document.getElementById("gs-root-note").value;
+    const chordKey = document.getElementById("gs-chord-type").value;
+    const thirdPos = document.getElementById("gs-third-pos").value;
+
+    const { usedStrings, invText } = computeVoicing(rootStr, rootName, chordKey, thirdPos);
+
+    // Tab string 6 -> 1
+    const tabArr = [6, 5, 4, 3, 2, 1].map(s => usedStrings[s] ? (usedStrings[s].isOptionalFifth ? "(" + usedStrings[s].fret + ")" : usedStrings[s].fret) : "x");
+    document.getElementById("gs-status").innerHTML =
+      "<div><strong>" + rootName + CHORD_SPECS[chordKey].name + "</strong> &nbsp;|&nbsp; <span style='color:#38bdf8;'>" + invText + "</span></div>" +
+      "<div style='font-family:monospace; color:#fde047;'>Tab (6→1): " + tabArr.join(" - ") + "</div>";
+
+    const canvas = document.getElementById("gs-canvas");
+    const ctx = canvas.getContext("2d");
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    const padL = 55, padR = 25, padT = 32, padB = 38;
+    const numFrets = 14;
+    const fretW = (canvas.width - padL - padR) / numFrets;
+    const strH = (canvas.height - padT - padB) / 5;
+
+    // Fret numbers & inlays
+    ctx.fillStyle = "#64748b";
+    ctx.font = "12px sans-serif";
+    ctx.textAlign = "center";
+    const inlays = [3, 5, 7, 9, 12];
+    for (let f = 1; f <= numFrets; f++) {
+      const xCenter = padL + (f - 0.5) * fretW;
+      ctx.fillText(f, xCenter, canvas.height - 10);
+      if (inlays.includes(f)) {
+        ctx.beginPath();
+        ctx.arc(xCenter, padT + 2.5 * strH, f === 12 ? 4 : 5, 0, Math.PI * 2);
+        ctx.fillStyle = "#1e293b";
+        ctx.fill();
+        ctx.fillStyle = "#64748b";
+      }
+    }
+
+    // Fret wires
+    for (let f = 0; f <= numFrets; f++) {
+      const x = padL + f * fretW;
+      ctx.beginPath();
+      ctx.moveTo(x, padT);
+      ctx.lineTo(x, padT + 5 * strH);
+      ctx.strokeStyle = f === 0 ? "#94a3b8" : "#334155";
+      ctx.lineWidth = f === 0 ? 4 : 1.5;
+      ctx.stroke();
+    }
+
+    // Strings (Top = String 1 High E, Bottom = String 6 Low E)
+    const strNames = { 1: "1 (E)", 2: "2 (B)", 3: "3 (G)", 4: "4 (D)", 5: "5 (A)", 6: "6 (E)" };
+    for (let s = 1; s <= 6; s++) {
+      const y = padT + (s - 1) * strH;
+      ctx.beginPath();
+      ctx.moveTo(padL, y);
+      ctx.lineTo(canvas.width - padR, y);
+      ctx.strokeStyle = "#64748b";
+      ctx.lineWidth = 1 + (s - 1) * 0.35;
+      ctx.stroke();
+
+      ctx.fillStyle = usedStrings[s] ? "#e2e8f0" : "#475569";
+      ctx.font = "12px monospace";
+      ctx.textAlign = "right";
+      ctx.fillText(strNames[s], padL - 10, y + 4);
+
+      if (!usedStrings[s]) {
+        ctx.fillStyle = "#ef4444";
+        ctx.font = "bold 13px sans-serif";
+        ctx.textAlign = "center";
+        ctx.fillText("×", padL - 2, y + 4);
+      }
+    }
+
+    // Markers (Interval labels only, 5th in Gray)
+    for (let s = 1; s <= 6; s++) {
+      const note = usedStrings[s];
+      if (!note) continue;
+      const x = padL + (note.fret - 0.5) * fretW;
+      const y = padT + (s - 1) * strH;
+
+      ctx.beginPath();
+      ctx.arc(x, y, 14, 0, Math.PI * 2);
+      ctx.fillStyle = COLORS[note.label] || "#64748b";
+      ctx.fill();
+      ctx.lineWidth = note.isOptionalFifth ? 1.5 : 2.5;
+      ctx.strokeStyle = note.isOptionalFifth ? "#94a3b8" : "#ffffff";
+      if (note.isOptionalFifth) ctx.setLineDash([3, 2]);
+      ctx.stroke();
+      ctx.setLineDash([]);
+
+      ctx.fillStyle = "#ffffff";
+      ctx.font = "bold 12px sans-serif";
+      ctx.textAlign = "center";
+      ctx.fillText(note.label, x, y + 4);
+    }
+  }
+
+  ["gs-root-str", "gs-root-note", "gs-chord-type", "gs-third-pos"].forEach(id => {
+    document.getElementById(id).addEventListener("change", render);
+  });
+  render();
+})();
+</script>
